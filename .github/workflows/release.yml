@@ -1,0 +1,70 @@
+name: release
+
+# Builds WebKitGTK against the Sinty OS buildroot config and attaches the
+# captured prebuilt tarball to the release for the pushed tag. Heavy: a webkitgtk
+# build pulls in the toolchain and its dependency tree, so it needs most of the
+# runner disk and runs for a long time. It runs once per version, not per bake.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Checkout singularity-os (br2-external)
+        uses: actions/checkout@v4
+        with:
+          repository: singularityos-lab/singularity-os
+          path: singularity-os
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential git wget cpio unzip rsync bc file python3 \
+            libssl-dev zstd gawk sed which
+
+      - name: Fetch buildroot
+        working-directory: singularity-os
+        run: |
+          wget -q https://buildroot.org/downloads/buildroot-2026.02.2.tar.xz -O br.tar.xz
+          tar xf br.tar.xz && mv buildroot-2026.02.2 buildroot-src
+
+      - name: Configure for a from-source webkitgtk
+        working-directory: singularity-os
+        run: |
+          make -C buildroot-src O="$PWD/buildroot-build" BR2_EXTERNAL="$PWD" singularity_defconfig
+          # The OS defconfig ships the prebuilt webkit; this repo builds it from
+          # source, so swap the two and let olddefconfig settle the deps.
+          sed -i 's/^BR2_PACKAGE_WEBKITGTK_PREBUILT=y/# BR2_PACKAGE_WEBKITGTK_PREBUILT is not set/' \
+            "$PWD/buildroot-build/.config"
+          echo 'BR2_PACKAGE_WEBKITGTK=y' >> "$PWD/buildroot-build/.config"
+          make -C buildroot-src O="$PWD/buildroot-build" BR2_EXTERNAL="$PWD" olddefconfig
+
+      - name: Build webkitgtk from source
+        working-directory: singularity-os
+        run: |
+          make -C buildroot-src O="$PWD/buildroot-build" BR2_EXTERNAL="$PWD" -j"$(nproc)" webkitgtk
+
+      - name: Capture the prebuilt tarball
+        run: |
+          BUILD_DIR="$PWD/singularity-os/buildroot-build" bash capture.sh "$PWD/out"
+
+      - name: Attach the tarball to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*.tar.zst

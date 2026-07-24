@@ -1,0 +1,7 @@
+# The prebuilt tarball is a RELEASE ASSET built by CI, never committed here.
+*.tar.zst
+*.tar.gz
+/build/
+/out/
+/singularity-os/
+/buildroot-build/
