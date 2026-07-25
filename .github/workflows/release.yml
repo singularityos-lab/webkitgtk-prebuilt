@@ -28,7 +28,7 @@ jobs:
       - name: Checkout singularity-os (br2-external)
         uses: actions/checkout@v4
         with:
-          repository: singularityos-lab/singularity-os
+          repository: singularityos-lab/os
           path: singularity-os
 
       - name: Install build dependencies
