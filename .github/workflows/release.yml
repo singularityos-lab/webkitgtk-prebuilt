@@ -5,9 +5,16 @@ name: release
 # build pulls in the toolchain and its dependency tree, so it needs most of the
 # runner disk and runs for a long time. It runs once per version, not per bake.
 
+# The release asset is the captured prebuilt tarball (built once, attached to the
+# tag). This from-source rebuild is a manual reproducibility check, not a gate on
+# tagging: it clones the OS br2-external for the exact toolchain, so it needs that
+# repo readable to the runner.
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach the rebuilt tarball to (e.g. v2.52.3)'
+        required: true
 
 permissions:
   contents: write
@@ -67,4 +74,5 @@ jobs:
       - name: Attach the tarball to the release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag }}
           files: out/*.tar.zst
